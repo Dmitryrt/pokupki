@@ -463,6 +463,7 @@
   <script>
     (() => {
       const STORAGE_KEY = "pokupki.v2";
+      const FAMILY_ID = "pokupki01";
       const firebaseConfig = {
         apiKey: "AIzaSyBVX9TB3LBxOzKDBNYGy3MZogdRmzMKCyE",
         authDomain: "pokupki-dd5a5.firebaseapp.com",
@@ -571,13 +572,22 @@
           .sort((a, b) => (b.created || 0) - (a.created || 0));
       }
 
+      function cloudError(error) {
+        console.error(error);
+        toast("Облако не приняло список — проверьте Rules в Firebase");
+      }
+
+      function writeItem(item) {
+        if (!cloudReady || skipCloud || !listId) return;
+        itemsRef().child(item.id).set({
+          text: item.text,
+          done: !!item.done,
+          created: item.created || Date.now()
+        }).catch(cloudError);
+      }
+
       function save() {
         persistLocal();
-        if (!cloudReady || skipCloud || !listId) return;
-        itemsRef().set(items.length ? itemsToMap() : null).catch((error) => {
-          console.error(error);
-          toast("Облако не приняло список — проверьте Rules в Firebase");
-        });
       }
 
       function applyCloud(value) {
@@ -659,21 +669,27 @@
       function addItem(text) {
         const value = text.trim();
         if (!value) return;
-        items.unshift({ id: uid(), text: value, done: false, created: Date.now() });
-        save();
+        const item = { id: uid(), text: value, done: false, created: Date.now() };
+        items.unshift(item);
+        persistLocal();
         render();
+        writeItem(item);
       }
 
       function toggle(id) {
         items = items.map((item) => item.id === id ? { ...item, done: !item.done } : item);
-        save();
+        persistLocal();
         render();
+        const item = items.find((entry) => entry.id === id);
+        if (item) writeItem(item);
       }
 
       function remove(id) {
         items = items.filter((item) => item.id !== id);
-        save();
+        persistLocal();
         render();
+        if (!cloudReady || skipCloud || !listId) return;
+        itemsRef().child(id).remove().catch(cloudError);
       }
 
       function renderQr(text) {
@@ -741,8 +757,11 @@
         }
         if (items.length && !confirm("Заменить текущий список вставленным?")) return;
         items = parsed;
-        save();
+        persistLocal();
         render();
+        if (cloudReady && listId) {
+          itemsRef().update(itemsToMap()).catch(cloudError);
+        }
         pasteDialog.close();
         toast("Список вставлен");
       }
@@ -776,8 +795,9 @@
       document.getElementById("clear-btn").addEventListener("click", () => {
         if (!items.length || confirm("Очистить список?")) {
           items = [];
-          save();
+          persistLocal();
           render();
+          if (cloudReady && listId) itemsRef().remove().catch(cloudError);
           shareDialog.close();
         }
       });
@@ -791,14 +811,14 @@
         itemsRef().on("value", (snap) => {
           const value = snap.val();
           if (value == null) {
-            if (items.length) {
-              itemsRef().set(itemsToMap()).catch((error) => {
-                console.error(error);
-                toast("Облако не приняло список — проверьте Rules в Firebase");
-              });
-            }
+            if (items.length) itemsRef().update(itemsToMap()).catch(cloudError);
             return;
           }
+          const cloudItems = mapToItems(value);
+          const cloudTexts = new Set(cloudItems.map((item) => item.text.trim().toLowerCase()));
+          items.forEach((item) => {
+            if (!cloudTexts.has(item.text.trim().toLowerCase())) writeItem(item);
+          });
           applyCloud(value);
         }, (error) => {
           toast("Нет доступа к облаку — откройте Rules в Firebase");
@@ -820,7 +840,7 @@
 
       const stored = loadStored();
       items = Array.isArray(stored.items) ? stored.items : [];
-      connectList(idFromUrl() || stored.listId || newListId());
+      connectList(FAMILY_ID);
       window.addEventListener("popstate", () => {
         const next = idFromUrl();
         if (next && next !== listId) connectList(next);
