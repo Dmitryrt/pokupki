@@ -1,20 +1,21 @@
 {
+  "id": "/pokupki/?l=pokupki01",
   "name": "Покупки",
   "short_name": "Покупки",
-  "start_url": "./?l=pokupki01",
-  "scope": "./",
+  "start_url": "/pokupki/?l=pokupki01",
+  "scope": "/pokupki/",
   "display": "standalone",
   "background_color": "#efe6d4",
   "theme_color": "#efe6d4",
   "icons": [
     {
-      "src": "https://dmitryrt.github.io/pokupki/icon-192.png",
+      "src": "/pokupki/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "https://dmitryrt.github.io/pokupki/icon-512.png",
+      "src": "/pokupki/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
