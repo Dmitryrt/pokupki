@@ -7,6 +7,7 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Покупки">
+  <link rel="manifest" href="manifest.webmanifest">
   <title>Покупки</title>
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect fill='%23efe6d4' width='64' height='64' rx='14'/%3E%3Cpath fill='%233f6b52' d='M18 22h28l-3 26H21L18 22zm8-6h12l2 6H24l2-6z'/%3E%3C/svg%3E">
   <style>
@@ -494,7 +495,14 @@
       let cloudReady = false;
 
       const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-      const newListId = () => Math.random().toString(36).slice(2, 10) + Math.random().toString(36).slice(2, 6);
+      const newListId = () => {
+        const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+        let id = "";
+        const bytes = new Uint8Array(12);
+        crypto.getRandomValues(bytes);
+        bytes.forEach((byte) => { id += chars[byte % chars.length]; });
+        return id;
+      };
 
       function firebaseConfigured() {
         return Boolean(firebaseConfig.apiKey && firebaseConfig.databaseURL && firebaseConfig.projectId);
@@ -504,20 +512,29 @@
         return firebase.database().ref(`lists/${listId}/items`);
       }
 
-      function readListId() {
-        const fromLink = location.hash.match(/[#&]l=([A-Za-z0-9_-]{8,32})/);
-        if (fromLink) return fromLink[1];
+      function loadStored() {
         try {
-          const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null");
-          if (data?.listId) return data.listId;
-        } catch { /* ignore */ }
-        return newListId();
+          return JSON.parse(localStorage.getItem(STORAGE_KEY) || "null") || {};
+        } catch {
+          return {};
+        }
+      }
+
+      function idFromUrl() {
+        const queryId = new URLSearchParams(location.search).get("l");
+        if (queryId && /^[A-Za-z0-9_-]{8,32}$/.test(queryId)) return queryId;
+        const hashId = location.hash.match(/[#&]l=([A-Za-z0-9_-]{8,32})/);
+        return hashId ? hashId[1] : "";
       }
 
       function setUrl() {
-        const next = `${location.pathname}${location.search}#l=${listId}`;
+        if (!listId) return location.href;
+        const url = new URL(location.href);
+        url.searchParams.set("l", listId);
+        url.hash = "";
+        const next = `${url.pathname}?${url.searchParams.toString()}`;
         history.replaceState(null, "", next);
-        return location.href;
+        return `${url.origin}${next}`;
       }
 
       function shareUrl() {
@@ -555,8 +572,11 @@
 
       function save() {
         persistLocal();
-        if (!cloudReady || skipCloud) return;
-        itemsRef().set(items.length ? itemsToMap() : null);
+        if (!cloudReady || skipCloud || !listId) return;
+        itemsRef().set(items.length ? itemsToMap() : null).catch((error) => {
+          console.error(error);
+          toast("Облако не приняло список — проверьте Rules в Firebase");
+        });
       }
 
       function applyCloud(value) {
@@ -765,19 +785,22 @@
         if (listId && cloudReady) itemsRef().off();
         listId = id;
         persistLocal();
-        if (!cloudReady) {
-          render();
-          return;
-        }
+        render();
+        if (!cloudReady) return;
         itemsRef().on("value", (snap) => {
           const value = snap.val();
-          if (value == null && items.length) {
-            itemsRef().set(itemsToMap());
+          if (value == null) {
+            if (items.length) {
+              itemsRef().set(itemsToMap()).catch((error) => {
+                console.error(error);
+                toast("Облако не приняло список — проверьте Rules в Firebase");
+              });
+            }
             return;
           }
           applyCloud(value);
         }, (error) => {
-          toast("Нет доступа к облаку");
+          toast("Нет доступа к облаку — откройте Rules в Firebase");
           console.error(error);
         });
       }
@@ -794,11 +817,12 @@
         }
       }
 
-      connectList(readListId());
-      render();
-      window.addEventListener("hashchange", () => {
-        const next = location.hash.match(/[#&]l=([A-Za-z0-9_-]{8,32})/);
-        if (next && next[1] !== listId) connectList(next[1]);
+      const stored = loadStored();
+      items = Array.isArray(stored.items) ? stored.items : [];
+      connectList(idFromUrl() || stored.listId || newListId());
+      window.addEventListener("popstate", () => {
+        const next = idFromUrl();
+        if (next && next !== listId) connectList(next);
       });
       input.focus();
     })();
