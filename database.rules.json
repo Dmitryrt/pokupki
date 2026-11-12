@@ -2,24 +2,9 @@
   "rules": {
     "lists": {
       "$id": {
-        ".read": "auth != null && auth.token.email != null && (data.child('access').child('members').child(auth.uid).exists() || data.child('access').child('allowed').child(auth.token.email.toLowerCase().replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',')).exists())",
-        ".validate": "$id.length >= 8 && $id.length <= 32",
-        "access": {
-          "allowed": {
-            "$email": {
-              ".write": "auth != null && auth.token.email != null && (root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() || (!root.child('lists').child($id).child('access').child('members').exists() && $email === auth.token.email.toLowerCase().replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',') && newData.exists()))",
-              ".validate": "newData.hasChildren(['email']) && newData.child('email').isString()"
-            }
-          },
-          "members": {
-            "$uid": {
-              ".write": "auth != null && auth.token.email != null && ((auth.uid === $uid && newData.exists() && (!root.child('lists').child($id).child('access').child('members').exists() || root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() || root.child('lists').child($id).child('access').child('allowed').child(auth.token.email.toLowerCase().replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',')).exists())) || (root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() && !newData.exists()))"
-            }
-          }
-        },
-        "items": {
-          ".write": "auth != null && auth.token.email != null && (root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() || root.child('lists').child($id).child('access').child('allowed').child(auth.token.email.toLowerCase().replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',').replace('.', ',')).exists())"
-        }
+        ".read": true,
+        ".write": true,
+        ".validate": "$id.length >= 8 && $id.length <= 32"
       }
     }
   }
