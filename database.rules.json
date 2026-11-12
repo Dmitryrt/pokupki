@@ -1,0 +1,23 @@
+{
+  "rules": {
+    "lists": {
+      "$id": {
+        ".read": "auth != null && data.child('access').child('members').child(auth.uid).exists()",
+        ".validate": "$id.length >= 8 && $id.length <= 32",
+        "access": {
+          "open": {
+            ".write": "auth != null && root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() && newData.isBoolean()"
+          },
+          "members": {
+            "$uid": {
+              ".write": "auth != null && auth.uid === $uid && (!root.child('lists').child($id).child('access').child('members').exists() || root.child('lists').child($id).child('access').child('members').child(auth.uid).exists() || root.child('lists').child($id).child('access').child('open').val() === true)"
+            }
+          }
+        },
+        "items": {
+          ".write": "auth != null && root.child('lists').child($id).child('access').child('members').child(auth.uid).exists()"
+        }
+      }
+    }
+  }
+}
