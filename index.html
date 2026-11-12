@@ -5,8 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="theme-color" content="#efe6d4">
   <meta name="mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-capable" content="yes">
-  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Покупки">
   <link rel="manifest" href="https://dmitryrt.github.io/pokupki/manifest.webmanifest">
   <link rel="shortcut icon" href="https://dmitryrt.github.io/pokupki/favicon.ico">
@@ -457,6 +455,19 @@
       font-size: 0.85rem;
       line-height: 1.4;
     }
+
+    .auth-safari {
+      display: block;
+      margin-top: 12px;
+      min-height: 44px;
+      line-height: 44px;
+      border-radius: 14px;
+      border: 1px solid var(--line);
+      background: #fffdf8;
+      color: var(--ink);
+      font-weight: 650;
+      text-decoration: none;
+    }
   </style>
 </head>
 <body>
@@ -465,7 +476,8 @@
       <h1>Покупки</h1>
       <p id="auth-message">Войдите через Google, чтобы видеть свой список. Посторонние его не откроют.</p>
       <button type="button" class="primary" id="google-btn">Войти через Google</button>
-      <p class="auth-hint hidden" id="auth-hint">На iPhone не заходите с иконки на экране: откройте Safari и вставьте ту же ссылку.</p>
+      <a class="auth-safari hidden" id="auth-safari" href="https://dmitryrt.github.io/pokupki/?l=pokupki01" target="_blank" rel="noopener">Открыть в Safari</a>
+      <p class="auth-hint hidden" id="auth-hint">На iPhone не заходите со старой иконки на экране: откройте Safari и войдите там.</p>
     </div>
   </div>
   <div class="app hidden" id="app">
@@ -622,6 +634,11 @@
 
       function isStandalone() {
         return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+      }
+
+      function showIosSafariHint() {
+        document.getElementById("auth-hint").classList.remove("hidden");
+        document.getElementById("auth-safari").classList.remove("hidden");
       }
 
       function showGate(text) {
@@ -1116,8 +1133,8 @@
         } catch (popupError) {
           console.error(popupError);
           if (isIOS() && isStandalone()) {
-            showGate("На iPhone с ярлыка Google-вход ломается. Откройте Safari, вставьте ту же ссылку и войдите там.");
-            document.getElementById("auth-hint").classList.remove("hidden");
+            showGate("На iPhone с ярлыка Google-вход ломается. Нажмите «Открыть в Safari» и войдите там.");
+            showIosSafariHint();
             return;
           }
           try {
@@ -1125,6 +1142,7 @@
           } catch (error) {
             console.error(error);
             showGate("Не получилось войти. Откройте список в Safari, не с иконки на экране.");
+            if (isIOS()) showIosSafariHint();
           }
         }
       }
@@ -1208,19 +1226,19 @@
       });
 
       if (cloudReady) {
-        if (isIOS()) document.getElementById("auth-hint").classList.remove("hidden");
+        if (isIOS()) showIosSafariHint();
         firebase.auth().getRedirectResult().catch((error) => {
           console.error(error);
           if (error && error.code !== "auth/redirect-cancelled-by-user") {
-            showGate("На iPhone войдите через Safari: откройте ту же ссылку в браузере с компасом, не с иконки на экране.");
-            document.getElementById("auth-hint").classList.remove("hidden");
+            showGate("На iPhone войдите через Safari: браузер с компасом, не старая иконка на экране.");
+            showIosSafariHint();
           }
         });
         firebase.auth().onAuthStateChanged(async (user) => {
           currentUser = user;
           if (!user) {
             showGate("Войдите через Google, чтобы видеть свой список. Посторонние его не откроют.");
-            if (isIOS()) document.getElementById("auth-hint").classList.remove("hidden");
+            if (isIOS()) showIosSafariHint();
             return;
           }
           authMessage.textContent = "Проверяем доступ…";
