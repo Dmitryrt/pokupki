@@ -577,11 +577,10 @@
             <path d="M22 2 15 22l-4-9-9-4 20-7z"/>
           </svg>
         </button>
-        <button class="icon-btn" id="share-btn" title="Отправить" aria-label="Отправить список">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8">
-            <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
-            <path d="M12 4v12"/>
-            <path d="M8 8l4-4 4 4"/>
+        <button class="icon-btn" id="share-btn" title="Настройки" aria-label="Настройки">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09A1.65 1.65 0 0 0 15 4.6a1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
           </svg>
         </button>
         <button class="icon-btn clear-btn" id="clear-btn" title="Новый список" aria-label="Новый список">
@@ -599,7 +598,7 @@
         <button class="add-btn" type="submit">Добавить</button>
       </form>
       <p class="hint hidden" id="empty">
-        Список пока пуст. Это общий список: что добавите — появится у всех, у кого открыта эта ссылка. Нажмите «Отправить», чтобы её переслать.
+        Список пока пуст. Это общий список: что добавите — появится у всех, кого пустили в настройках.
       </p>
       <ul class="list" id="active-list"></ul>
       <p class="count" id="count"></p>
@@ -613,8 +612,8 @@
 
   <dialog id="share-dialog">
     <div class="dialog-body">
-      <h2>Кто видит список</h2>
-      <p>Добавьте Google-почту. Этот человек откроет ссылку, войдёт — и увидит те же покупки.</p>
+      <h2>Настройки</h2>
+      <p>Кто видит список. Добавьте Google-почту — человек откроет ссылку, войдёт и увидит те же покупки.</p>
       <ul class="people-list" id="people-list"></ul>
       <form class="add-person" id="add-person-form">
         <input id="person-email" type="email" inputmode="email" autocomplete="email" placeholder="google@почта" maxlength="120">
