@@ -112,6 +112,10 @@
 
     .icon-btn:active { transform: scale(0.97); }
 
+    .icon-btn.clear-btn svg {
+      stroke: var(--danger);
+    }
+
     .sheet {
       background: var(--paper);
       border: 1px solid var(--line);
@@ -428,6 +432,12 @@
             <path d="M8 8l4-4 4 4"/>
           </svg>
         </button>
+        <button class="icon-btn clear-btn" id="clear-btn" title="Новый список" aria-label="Новый список">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke-width="1.8" stroke-linecap="round">
+            <path d="M6 6l12 12"/>
+            <path d="M18 6L6 18"/>
+          </svg>
+        </button>
       </div>
     </header>
 
@@ -461,7 +471,6 @@
       <div class="qr" id="qr-box"></div>
       <p class="qr-note" id="qr-note"></p>
       <div class="row">
-        <button type="button" class="danger" id="clear-btn">Новый список</button>
         <button type="button" class="ghost" id="close-share">Закрыть</button>
       </div>
     </div>
@@ -860,19 +869,21 @@
         input.focus();
       });
 
+      function clearList() {
+        if (items.length && !confirm("Очистить список?")) return;
+        editingId = null;
+        editingDraft = "";
+        items = [];
+        persistLocal();
+        render();
+        if (cloudReady && listId) itemsRef().remove().catch(cloudError);
+      }
+
       document.getElementById("share-btn").addEventListener("click", openShare);
       document.getElementById("close-share").addEventListener("click", () => shareDialog.close());
       document.getElementById("copy-btn").addEventListener("click", copyText);
       nativeShareBtn.addEventListener("click", nativeShare);
-      document.getElementById("clear-btn").addEventListener("click", () => {
-        if (!items.length || confirm("Очистить список?")) {
-          items = [];
-          persistLocal();
-          render();
-          if (cloudReady && listId) itemsRef().remove().catch(cloudError);
-          shareDialog.close();
-        }
-      });
+      document.getElementById("clear-btn").addEventListener("click", clearList);
 
       function connectList(id) {
         if (listId && cloudReady) itemsRef().off();
