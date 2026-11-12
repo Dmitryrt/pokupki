@@ -393,12 +393,6 @@
         </div>
       </div>
       <div class="header-actions">
-        <button class="icon-btn" id="paste-btn" title="Вставить список" aria-label="Вставить список">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8">
-            <rect x="8" y="8" width="12" height="12" rx="2"/>
-            <path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"/>
-          </svg>
-        </button>
         <button class="icon-btn" id="share-btn" title="Отправить" aria-label="Отправить список">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8">
             <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
@@ -445,21 +439,6 @@
     </div>
   </dialog>
 
-  <dialog id="paste-dialog">
-    <div class="dialog-body">
-      <h2>Вставить список</h2>
-      <p>Вставьте текст из сообщения. Строки станут пунктами.</p>
-      <textarea id="paste-text" placeholder="Покупки&#10;[ ] молоко&#10;[ ] хлеб"></textarea>
-      <div class="row">
-        <button type="button" id="from-clipboard">Из буфера</button>
-        <button type="button" id="close-paste">Закрыть</button>
-      </div>
-      <div class="row">
-        <button type="button" class="primary" id="apply-paste">Заменить текущий список</button>
-      </div>
-    </div>
-  </dialog>
-
   <div class="toast" id="toast"></div>
 
   <script>
@@ -490,9 +469,7 @@
       const subtitle = document.getElementById("subtitle");
       const toastEl = document.getElementById("toast");
       const shareDialog = document.getElementById("share-dialog");
-      const pasteDialog = document.getElementById("paste-dialog");
       const shareText = document.getElementById("share-text");
-      const pasteText = document.getElementById("paste-text");
       const qrBox = document.getElementById("qr-box");
       const qrNote = document.getElementById("qr-note");
       const nativeShareBtn = document.getElementById("native-share-btn");
@@ -617,29 +594,6 @@
         return ["Покупки", ...lines].join("\n");
       }
 
-      function parseList(text) {
-        return text
-          .replace(/^\uFEFF/, "")
-          .split(/\r?\n/)
-          .map((line) => line.trim())
-          .filter(Boolean)
-          .filter((line) => !/^покупки$/i.test(line))
-          .map((line) => {
-            let done = false;
-            let body = line;
-            const checked = /^(?:\[(?:x|х|v|✓|✔)\]|☑|✓|✔)\s*(.*)$/i.exec(line);
-            const unchecked = /^(?:\[ ?\]|☐|□|•|-)\s*(.*)$/i.exec(line);
-            if (checked) {
-              done = true;
-              body = checked[1].trim();
-            } else if (unchecked) {
-              body = unchecked[1].trim();
-            }
-            return body ? { id: uid(), text: body, done } : null;
-          })
-          .filter(Boolean);
-      }
-
       function itemButton(item, done) {
         const li = document.createElement("li");
         const row = document.createElement("div");
@@ -749,30 +703,6 @@
         }
       }
 
-      function applyPaste() {
-        const cloudLink = pasteText.value.match(/[#&?]l=([A-Za-z0-9_-]{8,32})/);
-        if (cloudLink) {
-          pasteDialog.close();
-          connectList(cloudLink[1]);
-          toast("Открыт общий список");
-          return;
-        }
-        const parsed = parseList(pasteText.value).map((item) => ({ ...item, created: Date.now() }));
-        if (!parsed.length) {
-          toast("Не нашла пунктов в тексте");
-          return;
-        }
-        if (items.length && !confirm("Заменить текущий список вставленным?")) return;
-        items = parsed;
-        persistLocal();
-        render();
-        if (cloudReady && listId) {
-          itemsRef().update(itemsToMap()).catch(cloudError);
-        }
-        pasteDialog.close();
-        toast("Список вставлен");
-      }
-
       form.addEventListener("submit", (event) => {
         event.preventDefault();
         addItem(input.value);
@@ -781,24 +711,9 @@
       });
 
       document.getElementById("share-btn").addEventListener("click", openShare);
-      document.getElementById("paste-btn").addEventListener("click", () => {
-        pasteText.value = "";
-        pasteDialog.showModal();
-        pasteText.focus();
-      });
       document.getElementById("close-share").addEventListener("click", () => shareDialog.close());
-      document.getElementById("close-paste").addEventListener("click", () => pasteDialog.close());
       document.getElementById("copy-btn").addEventListener("click", copyText);
       nativeShareBtn.addEventListener("click", nativeShare);
-      document.getElementById("apply-paste").addEventListener("click", applyPaste);
-      document.getElementById("from-clipboard").addEventListener("click", async () => {
-        try {
-          pasteText.value = await navigator.clipboard.readText();
-        } catch {
-          toast("Вставьте текст вручную");
-          pasteText.focus();
-        }
-      });
       document.getElementById("clear-btn").addEventListener("click", () => {
         if (!items.length || confirm("Очистить список?")) {
           items = [];
