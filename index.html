@@ -425,6 +425,15 @@
         </div>
       </div>
       <div class="header-actions">
+        <button class="icon-btn" id="notify-btn" title="Пора за покупками" aria-label="Пора за покупками">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="14" cy="4" r="2.2"/>
+            <path d="M12.5 8.5 9 12l-3-1"/>
+            <path d="m12.5 8.5 1.5 6 4 2"/>
+            <path d="m9.2 16.2-1.2 4.3"/>
+            <path d="m15.2 16.2.8 4.3"/>
+          </svg>
+        </button>
         <button class="icon-btn" id="share-btn" title="Отправить" aria-label="Отправить список">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#2c241b" stroke-width="1.8">
             <path d="M4 12v7a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-7"/>
@@ -487,6 +496,7 @@
     (() => {
       const STORAGE_KEY = "pokupki.v2";
       const FAMILY_ID = "pokupki01";
+      const PHONE_KEY = "pokupki.notifyPhone";
       const firebaseConfig = {
         apiKey: "AIzaSyBVX9TB3LBxOzKDBNYGy3MZogdRmzMKCyE",
         authDomain: "pokupki-dd5a5.firebaseapp.com",
@@ -879,7 +889,104 @@
         if (cloudReady && listId) itemsRef().remove().catch(cloudError);
       }
 
+      function readPhone() {
+        try {
+          return localStorage.getItem(PHONE_KEY) || "";
+        } catch {
+          return "";
+        }
+      }
+
+      function savePhone(phone) {
+        localStorage.setItem(PHONE_KEY, phone);
+      }
+
+      function normalizePhone(raw) {
+        let digits = String(raw || "").replace(/[^\d+]/g, "");
+        if (digits.startsWith("00")) digits = "+" + digits.slice(2);
+        if (digits.startsWith("8") && digits.length === 11) digits = "+7" + digits.slice(1);
+        else if (digits.startsWith("7") && digits.length === 11) digits = "+" + digits;
+        else if (/^\d{10}$/.test(digits)) digits = "+7" + digits;
+        if (!/^\+\d{10,15}$/.test(digits)) return "";
+        return digits;
+      }
+
+      function askPhone(existing) {
+        const typed = window.prompt(
+          existing ? "Новый номер, кому писать «Пора за покупками»" : "Номер, кому написать «Пора за покупками»",
+          existing || "+7"
+        );
+        if (typed == null) return "";
+        const phone = normalizePhone(typed);
+        if (!phone) {
+          toast("Не похоже на номер телефона");
+          return "";
+        }
+        savePhone(phone);
+        return phone;
+      }
+
+      function openSms(phone) {
+        const body = encodeURIComponent("Пора за покупками");
+        const ios = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        const href = ios ? `sms:${phone}&body=${body}` : `sms:${phone}?body=${body}`;
+        window.location.href = href;
+      }
+
+      function notifyShop() {
+        const saved = readPhone();
+        const phone = saved || askPhone("");
+        if (!phone) return;
+        openSms(phone);
+      }
+
+      function bindNotifyButton() {
+        const button = document.getElementById("notify-btn");
+        let pressTimer = 0;
+        let startX = 0;
+        let startY = 0;
+        let suppressClick = false;
+        const clearPress = () => {
+          clearTimeout(pressTimer);
+          pressTimer = 0;
+        };
+        button.addEventListener("pointerdown", (event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          suppressClick = false;
+          startX = event.clientX;
+          startY = event.clientY;
+          clearPress();
+          pressTimer = setTimeout(() => {
+            pressTimer = 0;
+            suppressClick = true;
+          }, 500);
+        });
+        button.addEventListener("pointermove", (event) => {
+          if (!pressTimer) return;
+          if (Math.hypot(event.clientX - startX, event.clientY - startY) > 10) clearPress();
+        });
+        button.addEventListener("pointerup", () => {
+          const ready = suppressClick;
+          clearPress();
+          if (ready) {
+            const phone = askPhone(readPhone());
+            if (phone) toast("Номер сохранён на этом телефоне");
+          }
+        });
+        button.addEventListener("pointercancel", clearPress);
+        button.addEventListener("click", (event) => {
+          if (suppressClick) {
+            event.preventDefault();
+            suppressClick = false;
+            return;
+          }
+          notifyShop();
+        });
+        button.addEventListener("contextmenu", (event) => event.preventDefault());
+      }
+
       document.getElementById("share-btn").addEventListener("click", openShare);
+      bindNotifyButton();
       document.getElementById("close-share").addEventListener("click", () => shareDialog.close());
       document.getElementById("copy-btn").addEventListener("click", copyText);
       nativeShareBtn.addEventListener("click", nativeShare);
