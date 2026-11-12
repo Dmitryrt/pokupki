@@ -450,6 +450,13 @@
       width: 100%;
       min-height: 48px;
     }
+
+    .auth-hint {
+      margin: 14px 0 0;
+      color: var(--muted);
+      font-size: 0.85rem;
+      line-height: 1.4;
+    }
   </style>
 </head>
 <body>
@@ -458,6 +465,7 @@
       <h1>Покупки</h1>
       <p id="auth-message">Войдите через Google, чтобы видеть свой список. Посторонние его не откроют.</p>
       <button type="button" class="primary" id="google-btn">Войти через Google</button>
+      <p class="auth-hint hidden" id="auth-hint">На iPhone не заходите с иконки на экране: откройте Safari и вставьте ту же ссылку.</p>
     </div>
   </div>
   <div class="app hidden" id="app">
@@ -610,6 +618,10 @@
 
       function isIOS() {
         return /iPhone|iPad|iPod/i.test(navigator.userAgent);
+      }
+
+      function isStandalone() {
+        return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
       }
 
       function showGate(text) {
@@ -1099,13 +1111,21 @@
 
       async function signInGoogle() {
         const provider = new firebase.auth.GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: "select_account" });
         try {
-          if (isIOS()) await firebase.auth().signInWithRedirect(provider);
-          else await firebase.auth().signInWithPopup(provider);
-        } catch (error) {
-          console.error(error);
-          toast("Не получилось войти через Google");
+          await firebase.auth().signInWithPopup(provider);
+        } catch (popupError) {
+          console.error(popupError);
+          if (isIOS() && isStandalone()) {
+            showGate("На iPhone с ярлыка Google-вход ломается. Откройте Safari, вставьте ту же ссылку и войдите там.");
+            document.getElementById("auth-hint").classList.remove("hidden");
+            return;
+          }
+          try {
+            await firebase.auth().signInWithRedirect(provider);
+          } catch (error) {
+            console.error(error);
+            showGate("Не получилось войти. Откройте список в Safari, не с иконки на экране.");
+          }
         }
       }
 
@@ -1188,13 +1208,19 @@
       });
 
       if (cloudReady) {
+        if (isIOS()) document.getElementById("auth-hint").classList.remove("hidden");
         firebase.auth().getRedirectResult().catch((error) => {
           console.error(error);
+          if (error && error.code !== "auth/redirect-cancelled-by-user") {
+            showGate("На iPhone войдите через Safari: откройте ту же ссылку в браузере с компасом, не с иконки на экране.");
+            document.getElementById("auth-hint").classList.remove("hidden");
+          }
         });
         firebase.auth().onAuthStateChanged(async (user) => {
           currentUser = user;
           if (!user) {
             showGate("Войдите через Google, чтобы видеть свой список. Посторонние его не откроют.");
+            if (isIOS()) document.getElementById("auth-hint").classList.remove("hidden");
             return;
           }
           authMessage.textContent = "Проверяем доступ…";
