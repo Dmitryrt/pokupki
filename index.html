@@ -176,6 +176,14 @@
       border: 1px solid var(--line);
       border-radius: 16px;
       background: #fffdf8;
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
+      touch-action: manipulation;
+    }
+
+    .item.editing {
+      opacity: 1;
     }
 
     .item-main {
@@ -206,6 +214,22 @@
       word-break: break-word;
     }
 
+    .item .edit-input {
+      width: 100%;
+      min-width: 0;
+      height: 36px;
+      border: 1px solid var(--accent);
+      border-radius: 10px;
+      padding: 0 10px;
+      font: inherit;
+      font-size: 1.05rem;
+      background: #fff;
+      color: var(--ink);
+      outline: none;
+      -webkit-user-select: text;
+      user-select: text;
+    }
+
     .item .remove {
       width: 36px;
       height: 36px;
@@ -233,6 +257,10 @@
       opacity: 0.36;
       background: transparent;
       box-shadow: none;
+    }
+
+    .item.done.editing {
+      opacity: 1;
     }
 
     .item.done .mark {
@@ -479,6 +507,8 @@
       let toastTimer = 0;
       let skipCloud = false;
       let cloudReady = false;
+      let editingId = null;
+      let editingDraft = "";
 
       const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       const newListId = () => {
@@ -598,6 +628,7 @@
         const li = document.createElement("li");
         const row = document.createElement("div");
         row.className = "item" + (done ? " done" : "");
+        row.dataset.itemId = item.id;
         row.innerHTML = `
           <button class="item-main" type="button">
             <span class="mark" aria-hidden="true"></span>
@@ -605,12 +636,119 @@
           </button>
           <button class="remove" type="button" aria-label="Удалить">×</button>
         `;
+        const main = row.querySelector(".item-main");
         row.querySelector(".text").textContent = item.text;
-        row.querySelector(".item-main").setAttribute("aria-label", done ? `Вернуть: ${item.text}` : `В корзину: ${item.text}`);
-        row.querySelector(".item-main").addEventListener("click", () => toggle(item.id));
+        main.setAttribute("aria-label", done ? `Вернуть: ${item.text}` : `В корзину: ${item.text}`);
+
+        let pressTimer = 0;
+        let startX = 0;
+        let startY = 0;
+        let suppressClick = false;
+
+        const clearPress = () => {
+          clearTimeout(pressTimer);
+          pressTimer = 0;
+        };
+
+        main.addEventListener("pointerdown", (event) => {
+          if (event.pointerType === "mouse" && event.button !== 0) return;
+          suppressClick = false;
+          startX = event.clientX;
+          startY = event.clientY;
+          clearPress();
+          pressTimer = setTimeout(() => {
+            pressTimer = 0;
+            suppressClick = true;
+          }, 500);
+        });
+        main.addEventListener("pointermove", (event) => {
+          if (!pressTimer) return;
+          if (Math.hypot(event.clientX - startX, event.clientY - startY) > 10) clearPress();
+        });
+        main.addEventListener("pointerup", () => {
+          const ready = suppressClick;
+          clearPress();
+          if (ready) startEdit(item.id);
+        });
+        main.addEventListener("pointercancel", clearPress);
+        main.addEventListener("click", (event) => {
+          if (suppressClick || editingId === item.id) {
+            event.preventDefault();
+            suppressClick = false;
+            return;
+          }
+          toggle(item.id);
+        });
+        main.addEventListener("contextmenu", (event) => event.preventDefault());
         row.querySelector(".remove").addEventListener("click", () => remove(item.id));
         li.appendChild(row);
         return li;
+      }
+
+      function mountEditInput(item) {
+        const row = document.querySelector(`[data-item-id="${item.id}"]`);
+        if (!row) return;
+        const textEl = row.querySelector(".text");
+        if (!textEl || row.querySelector(".edit-input")) return;
+        row.classList.add("editing");
+        const field = document.createElement("input");
+        field.className = "edit-input";
+        field.type = "text";
+        field.maxLength = 80;
+        field.value = editingDraft || item.text;
+        field.setAttribute("aria-label", "Изменить покупку");
+        field.setAttribute("enterkeyhint", "done");
+        textEl.replaceWith(field);
+        field.addEventListener("input", () => { editingDraft = field.value; });
+        field.addEventListener("keydown", (event) => {
+          if (event.key === "Enter") {
+            event.preventDefault();
+            field.blur();
+          }
+          if (event.key === "Escape") {
+            event.preventDefault();
+            cancelEdit();
+          }
+        });
+        field.addEventListener("blur", () => {
+          if (!field.isConnected) return;
+          commitEdit(item.id, field.value);
+        });
+        requestAnimationFrame(() => {
+          field.focus();
+          field.setSelectionRange(0, field.value.length);
+        });
+      }
+
+      function startEdit(id) {
+        const item = items.find((entry) => entry.id === id);
+        if (!item) return;
+        if (editingId && editingId !== id) commitEdit(editingId, editingDraft);
+        editingId = id;
+        editingDraft = item.text;
+        mountEditInput(item);
+      }
+
+      function cancelEdit() {
+        editingId = null;
+        editingDraft = "";
+        render();
+      }
+
+      function commitEdit(id, text) {
+        if (editingId !== id) return;
+        const value = String(text || "").trim();
+        const item = items.find((entry) => entry.id === id);
+        editingId = null;
+        editingDraft = "";
+        if (!item || !value || item.text === value) {
+          render();
+          return;
+        }
+        item.text = value;
+        persistLocal();
+        render();
+        writeItem(item);
       }
 
       function render() {
@@ -625,6 +763,14 @@
           ? (left ? `Осталось ${left}` : "Всё в корзине")
           : "";
         subtitle.textContent = left ? `${left} в списке` : (items.length ? "Можно идти на кассу" : "Список на этот раз");
+        if (editingId) {
+          const item = items.find((entry) => entry.id === editingId);
+          if (item) mountEditInput(item);
+          else {
+            editingId = null;
+            editingDraft = "";
+          }
+        }
       }
 
       function addItem(text) {
@@ -646,6 +792,10 @@
       }
 
       function remove(id) {
+        if (editingId === id) {
+          editingId = null;
+          editingDraft = "";
+        }
         items = items.filter((item) => item.id !== id);
         persistLocal();
         render();
