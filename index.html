@@ -522,6 +522,7 @@
       let listId = "";
       let toastTimer = 0;
       let skipCloud = false;
+      let seedLocal = true;
       let cloudReady = false;
       let editingId = null;
       let editingDraft = "";
@@ -626,6 +627,7 @@
         persistLocal();
         render();
         skipCloud = false;
+        seedLocal = false;
       }
 
       function toast(message) {
@@ -881,9 +883,14 @@
         editingId = null;
         editingDraft = "";
         items = [];
+        seedLocal = false;
         persistLocal();
         render();
-        if (cloudReady && listId) itemsRef().remove().catch(cloudError);
+        if (!cloudReady || !listId) return;
+        skipCloud = true;
+        itemsRef().remove()
+          .catch(cloudError)
+          .finally(() => { skipCloud = false; });
       }
 
       function readPhone() {
@@ -992,16 +999,23 @@
       function connectList(id) {
         if (listId && cloudReady) itemsRef().off();
         listId = id;
+        seedLocal = true;
         persistLocal();
         render();
         if (!cloudReady) return;
         itemsRef().on("value", (snap) => {
+          if (skipCloud) return;
           const value = snap.val();
-          if (value == null) {
-            if (items.length) itemsRef().update(itemsToMap()).catch(cloudError);
+          const cloudItems = mapToItems(value);
+          if (!cloudItems.length) {
+            if (seedLocal && items.length) {
+              seedLocal = false;
+              itemsRef().update(itemsToMap()).catch(cloudError);
+              return;
+            }
+            applyCloud(null);
             return;
           }
-          const cloudItems = mapToItems(value);
           const cloudTexts = new Set(cloudItems.map((item) => item.text.trim().toLowerCase()));
           items.forEach((item) => {
             if (!cloudTexts.has(item.text.trim().toLowerCase())) writeItem(item);
