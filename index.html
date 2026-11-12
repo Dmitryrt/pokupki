@@ -340,6 +340,87 @@
       color: var(--ink);
     }
 
+    textarea.share-link {
+      min-height: 64px;
+      margin-top: 4px;
+    }
+
+    .people-list {
+      list-style: none;
+      margin: 0 0 12px;
+      padding: 0;
+      display: grid;
+      gap: 8px;
+    }
+
+    .people-list li {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      background: #fffdf8;
+    }
+
+    .people-list .who {
+      flex: 1;
+      min-width: 0;
+    }
+
+    .people-list .mail {
+      display: block;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-weight: 650;
+      font-size: 0.92rem;
+    }
+
+    .people-list .status {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    .people-list .remove-person {
+      flex: 0 0 auto;
+      width: 36px;
+      min-height: 36px;
+      height: 36px;
+      padding: 0;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 1.2rem;
+      line-height: 1;
+    }
+
+    form.add-person {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    form.add-person input {
+      flex: 1;
+      min-width: 0;
+      height: 46px;
+      border: 1px solid var(--line);
+      border-radius: 14px;
+      padding: 0 12px;
+      font-size: 16px;
+      background: #fffdf8;
+      color: var(--ink);
+    }
+
+    form.add-person button {
+      flex: 0 0 auto;
+      height: 46px;
+      padding: 0 14px;
+    }
+
     .row {
       display: flex;
       gap: 8px;
@@ -532,18 +613,21 @@
 
   <dialog id="share-dialog">
     <div class="dialog-body">
-      <h2>Отправить список</h2>
-      <p>Одна ссылка на двоих. Второй человек входит через Google, когда вы нажмёте «Пустить ещё одного».</p>
-      <textarea id="share-text" readonly></textarea>
+      <h2>Кто видит список</h2>
+      <p>Добавьте Google-почту. Этот человек откроет ссылку, войдёт — и увидит те же покупки.</p>
+      <ul class="people-list" id="people-list"></ul>
+      <form class="add-person" id="add-person-form">
+        <input id="person-email" type="email" inputmode="email" autocomplete="email" placeholder="google@почта" maxlength="120">
+        <button type="submit" class="primary">Добавить</button>
+      </form>
+      <p>Ссылка, которую ему открыть:</p>
+      <textarea class="share-link" id="share-text" readonly></textarea>
       <div class="row">
         <button type="button" class="primary" id="copy-btn">Копировать ссылку</button>
         <button type="button" id="native-share-btn">Отправить</button>
       </div>
       <div class="qr" id="qr-box"></div>
       <p class="qr-note" id="qr-note"></p>
-      <div class="row">
-        <button type="button" id="invite-btn">Пустить ещё одного</button>
-      </div>
       <div class="row">
         <button type="button" class="danger" id="signout-btn">Выйти</button>
         <button type="button" class="ghost" id="close-share">Закрыть</button>
@@ -601,6 +685,7 @@
       let editingDraft = "";
       let currentUser = null;
       let isMember = false;
+      let peopleAccess = { allowed: {}, members: {} };
 
       const uid = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
       const newListId = () => {
@@ -624,8 +709,32 @@
         return firebase.database().ref(`lists/${listId || FAMILY_ID}/access/members/${uid}`);
       }
 
-      function openJoinRef() {
-        return firebase.database().ref(`lists/${listId || FAMILY_ID}/access/open`);
+      function accessRef() {
+        return firebase.database().ref(`lists/${listId || FAMILY_ID}/access`);
+      }
+
+      function allowedRef(email) {
+        return firebase.database().ref(`lists/${listId || FAMILY_ID}/access/allowed/${emailKey(email)}`);
+      }
+
+      function emailKey(email) {
+        return String(email || "").trim().toLowerCase().replace(/\./g, ",");
+      }
+
+      function normalizeEmail(raw) {
+        const email = String(raw || "").trim().toLowerCase();
+        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "";
+        return email;
+      }
+
+      function escapeHtml(text) {
+        return String(text).replace(/[&<>"']/g, (ch) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;"
+        }[ch]));
       }
 
       function isIOS() {
@@ -1108,7 +1217,14 @@
       document.getElementById("copy-btn").addEventListener("click", copyText);
       nativeShareBtn.addEventListener("click", nativeShare);
       document.getElementById("clear-btn").addEventListener("click", clearList);
-      document.getElementById("invite-btn").addEventListener("click", invitePerson);
+      document.getElementById("add-person-form").addEventListener("submit", (event) => {
+        event.preventDefault();
+        addPerson();
+      });
+      document.getElementById("people-list").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-remove-email]");
+        if (button) removePerson(button.getAttribute("data-remove-email"));
+      });
       document.getElementById("signout-btn").addEventListener("click", () => {
         shareDialog.close();
         firebase.auth().signOut();
@@ -1147,41 +1263,127 @@
         }
       }
 
-      async function invitePerson() {
+      function renderPeople(access) {
+        peopleAccess = {
+          allowed: (access && access.allowed) || {},
+          members: (access && access.members) || {}
+        };
+        const list = document.getElementById("people-list");
+        const myEmail = normalizeEmail(currentUser && currentUser.email);
+        const signed = {};
+        Object.values(peopleAccess.members).forEach((member) => {
+          const email = normalizeEmail(member && member.email);
+          if (email) signed[email] = true;
+        });
+        const emails = new Set();
+        Object.values(peopleAccess.allowed).forEach((row) => {
+          const email = normalizeEmail(row && row.email);
+          if (email) emails.add(email);
+        });
+        Object.keys(signed).forEach((email) => emails.add(email));
+        const rows = Array.from(emails).sort((a, b) => {
+          if (a === myEmail) return -1;
+          if (b === myEmail) return 1;
+          return a.localeCompare(b);
+        });
+        if (!rows.length) {
+          list.innerHTML = "<li><span class=\"who\"><span class=\"mail\">Пока никого</span><span class=\"status\">Добавьте Google-почту ниже</span></span></li>";
+          return;
+        }
+        list.innerHTML = rows.map((email) => {
+          const mine = email === myEmail;
+          const status = mine ? "это вы" : (signed[email] ? "уже входил" : "ещё не входил");
+          const remove = mine ? "" : `<button type="button" class="remove-person" data-remove-email="${escapeHtml(email)}" aria-label="Убрать">×</button>`;
+          return `<li><span class="who"><span class="mail">${escapeHtml(email)}</span><span class="status">${status}</span></span>${remove}</li>`;
+        }).join("");
+      }
+
+      async function addPerson() {
+        const input = document.getElementById("person-email");
+        const email = normalizeEmail(input.value);
+        if (!email) {
+          toast("Нужна обычная Google-почта");
+          return;
+        }
         if (!isMember || !listId) return;
         try {
-          await openJoinRef().set(true);
-          toast("Теперь пусть второй человек откроет ссылку и войдёт");
+          await allowedRef(email).set({ email, at: Date.now() });
+          input.value = "";
+          toast("Добавлен. Пусть откроет ссылку и войдёт");
         } catch (error) {
           cloudError(error);
         }
       }
 
+      async function removePerson(email) {
+        const normalized = normalizeEmail(email);
+        if (!normalized || !isMember || !listId) return;
+        if (normalized === normalizeEmail(currentUser && currentUser.email)) return;
+        if (!confirm(`Убрать ${normalized} из списка?`)) return;
+        try {
+          await allowedRef(normalized).remove();
+          const members = peopleAccess.members || {};
+          await Promise.all(Object.entries(members).map(([uid, member]) => {
+            return normalizeEmail(member && member.email) === normalized
+              ? membersRef(uid).remove()
+              : Promise.resolve();
+          }));
+          toast("Больше не видит список");
+        } catch (error) {
+          cloudError(error);
+        }
+      }
+
+      async function syncAllowedFromMembers(members) {
+        if (!members || !isMember) return;
+        const writes = {};
+        Object.values(members).forEach((member) => {
+          const email = normalizeEmail(member && member.email);
+          if (!email) return;
+          const key = emailKey(email);
+          if (peopleAccess.allowed && peopleAccess.allowed[key]) return;
+          writes[key] = { email, at: Number(member.at) || Date.now() };
+        });
+        if (!Object.keys(writes).length) return;
+        await firebase.database().ref(`lists/${listId || FAMILY_ID}/access/allowed`).update(writes);
+      }
+
       async function ensureMember(user) {
         listId = FAMILY_ID;
+        const email = normalizeEmail(user.email);
         try {
           await membersRef(user.uid).set({
-            email: user.email || "",
+            email: email || user.email || "",
             at: Date.now()
           });
-          try { await openJoinRef().set(false); } catch (_) {}
+          if (email) {
+            try { await allowedRef(email).set({ email, at: Date.now() }); } catch (_) {}
+          }
           isMember = true;
           return true;
         } catch (error) {
           console.error(error);
           isMember = false;
-          showGate("Этот список уже занят. Попросите хозяина нажать «Пустить ещё одного», затем войдите снова.");
+          showGate("Вашего Google нет в списке. Попросите добавить эту почту в «Кто видит список».");
           return false;
         }
       }
 
       function connectList(id) {
-        if (listId && cloudReady) itemsRef().off();
+        if (listId && cloudReady) {
+          try { itemsRef().off(); } catch (_) {}
+          try { accessRef().off(); } catch (_) {}
+        }
         listId = id;
         seedLocal = true;
         persistLocal();
         render();
         if (!cloudReady || !isMember) return;
+        accessRef().on("value", (snap) => {
+          const access = snap.val() || {};
+          renderPeople(access);
+          syncAllowedFromMembers(access.members).catch(() => {});
+        });
         itemsRef().on("value", (snap) => {
           if (skipCloud) return;
           const value = snap.val();
