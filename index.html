@@ -521,7 +521,6 @@
       let listId = "";
       let toastTimer = 0;
       let skipCloud = false;
-      let seedLocal = true;
       let cloudReady = false;
       let editingId = null;
       let editingDraft = "";
@@ -578,18 +577,6 @@
         setUrl();
       }
 
-      function itemsToMap() {
-        const map = {};
-        items.forEach((item) => {
-          map[item.id] = {
-            text: item.text,
-            done: !!item.done,
-            created: item.created || Date.now()
-          };
-        });
-        return map;
-      }
-
       function mapToItems(value) {
         return Object.entries(value || {})
           .map(([id, data]) => ({
@@ -626,7 +613,6 @@
         persistLocal();
         render();
         skipCloud = false;
-        seedLocal = false;
       }
 
       function toast(message) {
@@ -882,7 +868,6 @@
         editingId = null;
         editingDraft = "";
         items = [];
-        seedLocal = false;
         persistLocal();
         render();
         if (!cloudReady || !listId) return;
@@ -998,28 +983,12 @@
       function connectList(id) {
         if (listId && cloudReady) itemsRef().off();
         listId = id;
-        seedLocal = true;
         persistLocal();
         render();
         if (!cloudReady) return;
         itemsRef().on("value", (snap) => {
           if (skipCloud) return;
-          const value = snap.val();
-          const cloudItems = mapToItems(value);
-          if (!cloudItems.length) {
-            if (seedLocal && items.length) {
-              seedLocal = false;
-              itemsRef().update(itemsToMap()).catch(cloudError);
-              return;
-            }
-            applyCloud(null);
-            return;
-          }
-          const cloudTexts = new Set(cloudItems.map((item) => item.text.trim().toLowerCase()));
-          items.forEach((item) => {
-            if (!cloudTexts.has(item.text.trim().toLowerCase())) writeItem(item);
-          });
-          applyCloud(value);
+          applyCloud(snap.val());
         }, (error) => {
           toast("Нет доступа к облаку — откройте Rules в Firebase");
           console.error(error);
